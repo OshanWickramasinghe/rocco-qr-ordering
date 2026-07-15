@@ -11,7 +11,11 @@ export function QrCodeGrid({ tables }: { tables: TableRow[] }) {
   const [siteUrl, setSiteUrl] = useState("");
 
   useEffect(() => {
-    setSiteUrl(window.location.origin);
+    // Prefer a fixed, configured address (NEXT_PUBLIC_SITE_URL) so QR codes
+    // always point to your permanent site — never a temporary Vercel preview
+    // link, even if this page happens to be opened through one.
+    const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    setSiteUrl(configuredUrl || window.location.origin);
   }, []);
 
   useEffect(() => {
