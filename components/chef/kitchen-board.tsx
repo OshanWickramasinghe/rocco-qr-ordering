@@ -19,12 +19,12 @@ const NEXT_ACTION: Partial<Record<OrderStatus, { next: OrderStatus; label: strin
 };
 
 const STATUS_STYLES: Record<OrderStatus, string> = {
-  waiting: "border-gold bg-gold/5",
-  accepted: "border-chili bg-chili/5",
-  preparing: "border-chili bg-chili/5",
-  ready: "border-basil bg-basil/5",
-  served: "border-espresso/10 bg-white",
-  cancelled: "border-chili-dark/30 bg-chili-dark/5",
+  waiting: "border-l-gold bg-white",
+  accepted: "border-l-chili bg-white",
+  preparing: "border-l-chili bg-white",
+  ready: "border-l-basil bg-white",
+  served: "border-l-espresso/20 bg-white",
+  cancelled: "border-l-chili-dark bg-white",
 };
 
 function playChime() {
@@ -137,7 +137,7 @@ export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
               return (
                 <div
                   key={order.id}
-                  className={cn("rounded-2xl border-2 p-4 shadow-lg animate-ticket-in", STATUS_STYLES[order.status])}
+                  className={cn("rounded-2xl border-l-8 border border-espresso/5 p-4 shadow-lg animate-ticket-in text-ink", STATUS_STYLES[order.status])}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-display text-lg font-bold">{order.tables?.label}</span>

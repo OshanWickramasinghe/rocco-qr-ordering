@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Check, Bell, Receipt, Star } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -13,7 +14,7 @@ export function OrderTracker({ initialOrder, currency }: { initialOrder: Order; 
   const [order, setOrder] = useState<Order>(initialOrder);
   const [waiterCalled, setWaiterCalled] = useState(initialOrder.waiter_called);
   const [billRequested, setBillRequested] = useState(initialOrder.bill_requested);
-  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [reviewDone, setReviewDone] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -150,11 +151,24 @@ export function OrderTracker({ initialOrder, currency }: { initialOrder: Order; 
           </div>
         )}
 
-        {order.status === "served" && !reviewSubmitted && (
-          <ReviewForm orderId={order.id} tableId={order.table_id} onSubmitted={() => setReviewSubmitted(true)} />
+        {order.status === "served" && !reviewDone && (
+          <ReviewForm
+            orderId={order.id}
+            tableId={order.table_id}
+            onSubmitted={() => setReviewDone(true)}
+            onSkip={() => setReviewDone(true)}
+          />
         )}
-        {reviewSubmitted && (
-          <p className="text-center text-sm text-basil font-medium mt-6">Thanks for your feedback! 🎉</p>
+        {order.status === "served" && reviewDone && (
+          <p className="text-center text-sm text-basil font-medium mt-6">Thanks! 🎉</p>
+        )}
+
+        {(order.status === "served" || order.status === "cancelled") && (
+          <Link href={`/table/${order.table_id}`}>
+            <Button variant="secondary" size="lg" className="w-full mt-5">
+              Back to Menu
+            </Button>
+          </Link>
         )}
 
         <p className="text-center text-xs text-ink/30 mt-8">Placed {timeSince(order.created_at)}</p>
@@ -167,10 +181,12 @@ function ReviewForm({
   orderId,
   tableId,
   onSubmitted,
+  onSkip,
 }: {
   orderId: string;
   tableId: number;
   onSubmitted: () => void;
+  onSkip: () => void;
 }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -214,9 +230,14 @@ function ReviewForm({
         value={comment}
         onChange={(e) => setComment(e.target.value)}
       />
-      <Button className="w-full mt-3" onClick={submit} disabled={submitting}>
-        {submitting ? "Submitting…" : "Submit Review"}
-      </Button>
+      <div className="flex gap-2 mt-3">
+        <Button variant="ghost" className="shrink-0" onClick={onSkip} disabled={submitting}>
+          Skip
+        </Button>
+        <Button className="flex-1" onClick={submit} disabled={submitting}>
+          {submitting ? "Submitting…" : "Submit Review"}
+        </Button>
+      </div>
     </div>
   );
 }
