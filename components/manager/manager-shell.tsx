@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  Radio,
   UtensilsCrossed,
   ClipboardList,
   BarChart3,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/manager/live", label: "Live Orders", icon: Radio },
   { href: "/manager/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/manager/orders", label: "Orders", icon: ClipboardList },
   { href: "/manager/reports", label: "Reports", icon: BarChart3 },

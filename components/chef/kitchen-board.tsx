@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/button";
 import { cn, timeSince } from "@/lib/utils";
 import type { Order, OrderStatus } from "@/lib/types";
 
-const ACTIVE_STATUSES: OrderStatus[] = ["waiting", "accepted", "preparing", "ready"];
+const ACTIVE_STATUSES: OrderStatus[] = ["accepted", "preparing", "ready"];
 
 const NEXT_ACTION: Partial<Record<OrderStatus, { next: OrderStatus; label: string; variant: "warning" | "primary" | "success" }>> = {
-  waiting: { next: "accepted", label: "Accept", variant: "warning" },
   accepted: { next: "preparing", label: "Start Preparing", variant: "primary" },
   preparing: { next: "ready", label: "Mark Ready", variant: "success" },
   ready: { next: "served", label: "Mark Completed", variant: "success" },
@@ -49,6 +48,8 @@ function playChime() {
 export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
   const [soundOn, setSoundOn] = useState(true);
   const soundOnRef = useRef(soundOn);
   soundOnRef.current = soundOn;
@@ -65,6 +66,7 @@ export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
       .channel("kitchen-orders")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, async (payload) => {
         const newOrder = payload.new as Order;
+        if (!ACTIVE_STATUSES.includes(newOrder.status)) return; // still waiting on manager approval
         const fullOrder = await fetchOrderWithRetry(supabase, newOrder.id);
         if (fullOrder) {
           setOrders((prev) => {
@@ -75,13 +77,28 @@ export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
           toast.info(`New order — ${fullOrder.tables?.label ?? "Table"} #${fullOrder.order_number}`);
         }
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, (payload) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, async (payload) => {
         const updated = payload.new as Order;
-        setOrders((prev) =>
-          updated && ACTIVE_STATUSES.includes(updated.status)
-            ? prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
-            : prev.filter((o) => o.id !== updated.id)
-        );
+        if (!ACTIVE_STATUSES.includes(updated.status)) {
+          setOrders((prev) => prev.filter((o) => o.id !== updated.id));
+          return;
+        }
+        setOrders((prev) => {
+          const exists = prev.some((o) => o.id === updated.id);
+          if (exists) return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
+          return prev; // brand new arrival — the block below fetches and adds it with items
+        });
+        const alreadyTracked = ordersRef.current.some((o) => o.id === updated.id);
+        if (!alreadyTracked) {
+          // The manager just approved this order — it's new to the kitchen, so fetch
+          // its full details (including items) and add it, with the same new-order chime.
+          const fullOrder = await fetchOrderWithRetry(supabase, updated.id);
+          if (fullOrder) {
+            setOrders((prev) => (prev.some((o) => o.id === fullOrder.id) ? prev : [fullOrder as Order, ...prev]));
+            if (soundOnRef.current) playChime();
+            toast.info(`New order — ${fullOrder.tables?.label ?? "Table"} #${fullOrder.order_number}`);
+          }
+        }
       })
       // Order items sometimes finish saving a moment after the order itself.
       // Whenever one arrives, attach it directly to its order in place —

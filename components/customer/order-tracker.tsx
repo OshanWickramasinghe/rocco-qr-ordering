@@ -42,23 +42,33 @@ export function OrderTracker({ initialOrder, currency }: { initialOrder: Order; 
   }, [order.id]);
 
   async function callWaiter() {
-    setWaiterCalled(true);
-    toast.success("Waiter has been notified");
-    await fetch(`/api/orders/${order.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ waiter_called: true }),
-    });
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ waiter_called: true }),
+      });
+      if (!res.ok) throw new Error();
+      setWaiterCalled(true);
+      toast.success("Waiter has been notified");
+    } catch {
+      toast.error("Could not reach the kitchen — please ask a staff member directly.");
+    }
   }
 
   async function requestBill() {
-    setBillRequested(true);
-    toast.success("Bill requested — someone will be over shortly");
-    await fetch(`/api/orders/${order.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bill_requested: true }),
-    });
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bill_requested: true }),
+      });
+      if (!res.ok) throw new Error();
+      setBillRequested(true);
+      toast.success("Bill requested — someone will be over shortly");
+    } catch {
+      toast.error("Could not reach the kitchen — please ask a staff member directly.");
+    }
   }
 
   const config = STATUS_CONFIG[order.status];

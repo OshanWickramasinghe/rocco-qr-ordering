@@ -60,6 +60,8 @@ export interface Order {
   estimated_ready_minutes: number;
   waiter_called: boolean;
   bill_requested: boolean;
+  bill_settled: boolean;
+  settled_at: string | null;
   accepted_at: string | null;
   ready_at: string | null;
   served_at: string | null;
