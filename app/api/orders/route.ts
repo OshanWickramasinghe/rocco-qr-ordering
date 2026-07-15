@@ -17,81 +17,24 @@ export async function POST(request: Request) {
 
   const supabase = createClient();
 
-  const ids = lines.map((l) => l.menuItemId);
-  const { data: menuItems, error: menuError } = await supabase
-    .from("menu_items")
-    .select("id, name, price, is_available")
-    .in("id", ids);
+  // This calls a single database function that creates the order AND all of
+  // its items together, in one all-or-nothing transaction. That guarantees
+  // the Kitchen Display never sees an order before its items are attached.
+  const { data, error } = await supabase.rpc("create_order_with_items", {
+    p_table_id: tableId,
+    p_items: lines.map((l) => ({
+      menu_item_id: l.menuItemId,
+      quantity: l.quantity,
+      notes: l.notes || null,
+    })),
+  });
 
-  if (menuError || !menuItems) {
-    return NextResponse.json({ error: "Could not verify menu items." }, { status: 500 });
+  if (error) {
+    const message = error.message.includes("No valid items")
+      ? "None of the items in your cart are currently available."
+      : "Could not place your order. Please try again.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("vat_rate, service_charge_rate")
-    .eq("id", 1)
-    .single();
-
-  const vatRate = settings?.vat_rate ?? 0;
-  const serviceRate = settings?.service_charge_rate ?? 0;
-
-  let subtotal = 0;
-  const orderItemsPayload: {
-    menu_item_id: string;
-    item_name: string;
-    unit_price: number;
-    quantity: number;
-    notes: string | null;
-    line_total: number;
-  }[] = [];
-
-  for (const line of lines) {
-    const item = menuItems.find((m) => m.id === line.menuItemId);
-    if (!item || !item.is_available) continue;
-    const lineTotal = Number(item.price) * line.quantity;
-    subtotal += lineTotal;
-    orderItemsPayload.push({
-      menu_item_id: item.id,
-      item_name: item.name,
-      unit_price: Number(item.price),
-      quantity: line.quantity,
-      notes: line.notes || null,
-      line_total: lineTotal,
-    });
-  }
-
-  if (orderItemsPayload.length === 0) {
-    return NextResponse.json({ error: "None of the items in your cart are currently available." }, { status: 400 });
-  }
-
-  const vatAmount = Math.round(subtotal * (vatRate / 100) * 100) / 100;
-  const serviceCharge = Math.round(subtotal * (serviceRate / 100) * 100) / 100;
-  const grandTotal = subtotal + vatAmount + serviceCharge;
-
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      table_id: tableId,
-      subtotal,
-      vat_amount: vatAmount,
-      service_charge: serviceCharge,
-      grand_total: grandTotal,
-    })
-    .select()
-    .single();
-
-  if (orderError || !order) {
-    return NextResponse.json({ error: "Could not place your order. Please try again." }, { status: 500 });
-  }
-
-  const { error: itemsError } = await supabase
-    .from("order_items")
-    .insert(orderItemsPayload.map((i) => ({ ...i, order_id: order.id })));
-
-  if (itemsError) {
-    return NextResponse.json({ error: "Order saved but items failed to attach." }, { status: 500 });
-  }
-
-  return NextResponse.json({ order });
+  return NextResponse.json({ order: data });
 }

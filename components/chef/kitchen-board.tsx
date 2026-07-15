@@ -65,13 +65,12 @@ export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
       .channel("kitchen-orders")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, async (payload) => {
         const newOrder = payload.new as Order;
-        const { data: fullOrder } = await supabase
-          .from("orders")
-          .select("*, order_items(*), tables(label)")
-          .eq("id", newOrder.id)
-          .single();
+        const fullOrder = await fetchOrderWithRetry(supabase, newOrder.id);
         if (fullOrder) {
-          setOrders((prev) => [fullOrder as Order, ...prev]);
+          setOrders((prev) => {
+            if (prev.some((o) => o.id === fullOrder.id)) return prev;
+            return [fullOrder as Order, ...prev];
+          });
           if (soundOnRef.current) playChime();
           toast.info(`New order — ${fullOrder.tables?.label ?? "Table"} #${fullOrder.order_number}`);
         }
@@ -84,12 +83,47 @@ export function KitchenBoard({ initialOrders }: { initialOrders: Order[] }) {
             : prev.filter((o) => o.id !== updated.id)
         );
       })
+      // Order items sometimes finish saving a moment after the order itself.
+      // Whenever one arrives, attach it directly to its order in place —
+      // this is what actually fixes items showing up late or not at all.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_items" }, (payload) => {
+        const newItem = payload.new as Order["order_items"] extends (infer T)[] | undefined ? T : never;
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id !== (newItem as any).order_id) return o;
+            const alreadyHasItem = o.order_items?.some((i) => i.id === (newItem as any).id);
+            if (alreadyHasItem) return o;
+            return { ...o, order_items: [...(o.order_items ?? []), newItem as any] };
+          })
+        );
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Fetches a freshly-created order along with its items. Since items are saved a
+  // split second after the order itself, this retries briefly if items aren't there yet
+  // (the order_items listener above will also fill them in if they land after this).
+  async function fetchOrderWithRetry(
+    supabase: ReturnType<typeof createClient>,
+    orderId: string,
+    attempt = 0
+  ): Promise<Order | null> {
+    const { data } = await supabase
+      .from("orders")
+      .select("*, order_items(*), tables(label)")
+      .eq("id", orderId)
+      .single();
+
+    if (data && (data.order_items?.length ?? 0) === 0 && attempt < 3) {
+      await new Promise((r) => setTimeout(r, 400));
+      return fetchOrderWithRetry(supabase, orderId, attempt + 1);
+    }
+    return data as Order | null;
+  }
 
   async function updateStatus(orderId: string, status: OrderStatus) {
     setOrders((prev) =>
