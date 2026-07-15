@@ -9,7 +9,7 @@ export default async function ChefDashboardPage() {
   const { data: orders } = await supabase
     .from("orders")
     .select("*, order_items(*), tables(label)")
-    .in("status", ["accepted", "preparing", "ready"])
+    .in("status", ["waiting", "accepted", "preparing", "ready"])
     .order("created_at", { ascending: false });
 
   return <KitchenBoard initialOrders={orders ?? []} />;
